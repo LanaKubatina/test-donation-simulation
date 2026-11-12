@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confidence check</title>
+
+    <!-- Fonts: Space Grotesk (heading) and Inter (body) from Google Fonts.
+         These are the same two faces as the "Case File" design system.
+         The names here must match HEADING_FONT and BODY_FONT in CONFIG.
+         If the fonts cannot load, the page falls back to Arial. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&amp;family=Inter:wght@400;600&amp;family=IBM+Plex+Mono:wght@500&amp;display=swap" rel="stylesheet">
+
+    <!--
+	Snippet: Confidence check for "The Test Donation Is Missing" (Storyline 360 Web Object)
+	Based on: Sentiment Check by Stephanie Harnett (Rise Code Block Library, 2026-09-06).
+	Changes from the original (all marked "STORYLINE" below):
+	  - CONFIG reworded and restyled for the Case File design system.
+	  - Single rating after the case: MODE 'initial', no second copy.
+	  - Sends the rating to Storyline variables with GetPlayer().SetVar.
+	  - Rise messages (resize, complete) switched off.
+	  - Nothing is saved in the browser by default (SAVE_TO_BROWSER: false).
+	-->
+
+    <style>
+        /* === CSS VARIABLES === */
+        :root {
+            /* Typography — Case File design system */
+            --heading-font: 'Space Grotesk', Arial, sans-serif;
+            --body-font:    'Inter', Arial, sans-serif;
+            --mono-font:    'IBM Plex Mono', 'Courier New', monospace;   /* eyebrow and caption labels */
+
+            /* Font sizes (px). The design system's minimum text size is 24px,
+               because the course is shown full screen on a 1920 x 1080 slide. */
+            --large-size:   48px;
+            --heading-size: 40px;
+            --body-size:    28px;
+            --small-size:   24px;
+            --caption-size: 24px;   /* Tags above result cards */
+
+            /* Colours — Ink Navy, Teal, Paper */
+            --primary-color: #0F766E;
+            --primary-hover: #0B5A54;
+            --text-color:    #14213D;
+            --bg-color:      #FFFFFF;
+
+            /* Component specific */
+            --panel-bg:      #F6F7F9;
+            --panel-padding: 1.5rem;
+            --box-border:    #D5DAE1;
+            --box-radius:    20px;
+            --box-padding:   2rem;
+            --box-shadow:    none;
+            --max-width:     100%;
+            --card-bg:       #FFFFFF;
+            --card-radius:   16px;
+            --panel-radius:  16px;
+            --card-border:   #8A93A3;
+            --rule-color:    #D5DAE1;
+            --muted-color:   #4B5568;
+            --success-color: #1B7F4B;   /* design system Success */
+            --focus-color:   #2563EB;   /* design system Focus */
+            --locked-bg:     #E8EBF2;
+            --locked-border: #8A93A3;
+            --button-radius: 16px;
+            --note-bg:       #FDF1DC;
+            --note-border:   #B45309;
+
+            /* Icon sizing — adjusted at breakpoints below */
+            --icon-size:     84px;
+            --result-icon-size: var(--icon-size);   /* Icon in the after submit summary */
+            --icon-stroke:   1.6;
+
+            /* Card sizing */
+            --card-min-height: 190px;
+            --card-gap:        16px;
+        }
+
+        /* === BASE RESET === */
+        *, *::before, *::after { box-sizing: border-box; }
+
+        /* === RISE IFRAME COMPATIBILITY === */
+        html, body {
+            margin: 0;
+            padding: 0;
+            background-color: transparent;
+            height: auto;
+            min-height: auto;
+        }
+
+        body {
+            font-family: var(--body-font);
+            font-size: var(--body-size);
+            color: var(--text-color);
+            padding: 1rem;
+        }
+
+        /* === TYPOGRAPHY CLASSES === */
+        .rise-heading {
+            font-family: var(--heading-font);
+            font-size: var(--heading-size);
+            line-height: 1.2;
+        }
+
+        .rise-body {
+            font-family: var(--body-font);
+            font-size: var(--body-size);
+            line-height: 1.5;
+        }
+
+        /* === ACCESSIBILITY: FOCUS STATES === */
+        button:focus-visible,
+        input:focus-visible,
+        textarea:focus-visible,
+        select:focus-visible,
+        [tabindex]:focus-visible {
+            outline: 4px solid var(--focus-color);
+            outline-offset: 3px;
+        }
+
+        /* === REDUCED MOTION === */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* === LAYOUT === */
+        .sc-wrap {
+            width: 100%;
+            max-width: var(--max-width);
+            margin: 0 auto;
+        }
+
+        /* === FLIP CARD === */
+        .sc-scene { perspective: 2000px; }
+
+        .sc-flip {
+            position: relative;
+            width: 100%;
+            transform-style: preserve-3d;
+            /* Flip speed: try 0.3s for snappier, 1.2s for slower */
+            transition: transform 0.7s cubic-bezier(0.4, 0.15, 0.2, 1);
+        }
+
+        .sc-flip.sc-flipped { transform: rotateY(180deg); }
+
+        /* No animation when the flip is switched off in CONFIG */
+        .sc-flip.sc-noflip { transition: none; }
+
+        .sc-face {
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+
+        /* The back face stacks its content so the retry button can sit at the
+           bottom regardless of how long the feedback paragraph is */
+        .sc-back {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Used for a moment while a face is measured at its natural height */
+        .sc-face.sc-measure { height: auto !important; }
+
+        /* The back sits on top of the front but keeps its natural height,
+           so both faces can be measured before the flip runs. */
+        .sc-back {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            transform: rotateY(180deg);
+        }
+
+        /* The face that is turned away must not take clicks or focus */
+        .sc-face[aria-hidden="true"] { pointer-events: none; }
+
+        /* Optional outer box — mirrors the framed look of a Rise survey block */
+        .sc-face.sc-boxed {
+            background-color: var(--bg-color);
+            border: 1px solid var(--box-border);
+            border-radius: var(--box-radius);
+            padding: var(--box-padding);
+            box-shadow: var(--box-shadow);
+        }
+
+        /* === HEADER === */
+        .sc-title {
+            font-family: var(--heading-font);
+            font-size: var(--large-size);
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--text-color);
+            margin: 0 0 1.25rem 0;
+        }
+
+        .sc-question {
+            font-family: var(--body-font);
+            font-size: var(--body-size);
+            line-height: 1.5;
+            color: var(--text-color);
+            margin: 0 0 1rem 0;
+        }
+
+        .sc-rule {
+            border: 0;
+            border-top: 1px solid var(--rule-color);
+            margin: 0 0 1.25rem 0;
+        }
+
+        /* === RECALL LINE (revisit mode) === */
+        .sc-recall {
+            font-family: var(--body-font);
+            font-size: var(--small-size);
+            line-height: 1.5;
+            color: var(--muted-color);
+            margin: 0 0 1rem 0;
+        }
+
+        .sc-recall strong { color: var(--text-color); }
+
+        /* === NO BASELINE NOTE === */
+        .sc-note {
+            font-family: var(--body-font);
+            font-size: var(--small-size);
+            line-height: 1.5;
+            background-color: var(--note-bg);
+            border-left: 4px solid var(--note-border);
+            border-radius: 4px;
+            padding: 0.75rem 1rem;
+            margin: 0 0 1rem 0;
+        }
+
+        /* === SCALE PANEL === */
+        .sc-panel {
+            background-color: var(--panel-bg);
+            border-radius: var(--panel-radius);
+            padding: var(--panel-padding);
+            display: flex;
+            flex-direction: row;
+            gap: var(--card-gap);
+            align-items: stretch;
+        }
+
+        /* === SCALE CARD === */
+        .sc-card {
+            flex: 1 1 0;
+            min-width: 0;
+            min-height: var(--card-min-height);
+            background-color: var(--card-bg);
+            border: 2px solid var(--box-border);
+            border-radius: var(--card-radius);
+            padding: 1rem 0.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            font-family: var(--heading-font);
+            color: var(--text-color);
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+        }
+
+        .sc-card:hover {
+            border-color: var(--text-color);
+        }
+
+        /* STORYLINE: the selected state must not rely on colour alone (design
+           system rule). It gets a thicker ring, a tint and the word "Selected". */
+        .sc-card[aria-checked="true"] {
+            border-color: var(--primary-color);
+            box-shadow: inset 0 0 0 3px var(--primary-color);
+            background-color: #E3F3F1;
+        }
+
+        .sc-card[aria-checked="true"]::after {
+            content: "Selected";
+            font-size: var(--caption-size);
+            font-weight: 700;
+            color: var(--primary-color);
+            line-height: 1.2;
+        }
+
+        .sc-card:active { transform: translateY(1px); }
+
+        .sc-card-label {
+            font-family: var(--heading-font);
+            font-size: var(--small-size);
+            font-weight: 700;
+            line-height: 1.25;
+            text-align: center;
+            word-break: break-word;
+        }
+
+        .sc-icon {
+            width: var(--icon-size);
+            height: var(--icon-size);
+            flex: 0 0 auto;
+            display: block;
+        }
+
+        .sc-icon svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            stroke-width: var(--icon-stroke);
+        }
+
+        /* Number icons draw their digit as SVG text */
+        .sc-icon svg text {
+            font-family: var(--heading-font);
+            font-weight: 700;
+        }
+
+        /* Previous answer marker (revisit mode) */
+        .sc-card.sc-previous {
+            border-color: var(--muted-color);
+            border-style: dashed;
+        }
+
+        .sc-card.sc-previous[aria-checked="true"] {
+            border-color: var(--primary-color);
+            border-style: solid;
+        }
+
+        .sc-prev-tag {
+            font-family: var(--mono-font);
+            font-size: var(--caption-size);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--muted-color);
+            line-height: 1.2;
+            text-align: center;
+        }
+
+        /* === SUBMIT BUTTON === */
+        .sc-actions {
+            display: flex;
+            justify-content: center;
+            margin-top: 1.75rem;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: #ffffff;
+            font-family: var(--body-font);
+            font-size: var(--body-size);
+            font-weight: 600;
+            min-height: 56px;
+            min-width: 200px;
+            padding: 0.8rem 2rem;
+            border: 3px solid var(--primary-color);
+            border-radius: var(--button-radius);
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+
+        .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); border-color: var(--primary-hover); }
+        .btn-primary:active:not(:disabled) { transform: translateY(1px); }
+
+        .btn-primary:disabled {
+            /* Locked state from the design system: grey fill, dashed border, muted text */
+            background-color: var(--locked-bg);
+            border: 3px dashed var(--locked-border);
+            color: var(--muted-color);
+            cursor: not-allowed;
+        }
+
+        /* === SUCCESS STATE === */
+        .sc-success-head {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+            margin: 0 0 1rem 0;
+        }
+
+        .sc-success-mark {
+            width: 32px;
+            height: 32px;
+            flex: 0 0 auto;
+            color: var(--success-color);
+        }
+
+        .sc-success-mark svg { width: 100%; height: 100%; display: block; stroke-width: var(--icon-stroke); }
+
+        .sc-success-title {
+            font-family: var(--heading-font);
+            font-size: var(--heading-size);
+            font-weight: 700;
+            line-height: 1.2;
+            margin: 0;
+            text-align: center;
+        }
+
+        .sc-result-panel {
+            padding: 0;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+        }
+
+        .sc-result-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 0;
+        }
+
+        .sc-result-caption {
+            font-family: var(--mono-font);
+            font-size: var(--caption-size);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--muted-color);
+            line-height: 1.2;
+            text-align: center;
+        }
+
+        .sc-result-card {
+            background-color: var(--card-bg);
+            border: 2px solid var(--primary-color);
+            border-radius: var(--card-radius);
+            min-width: 130px;
+            min-height: var(--card-min-height);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        /* The summary icon matches the scale card icons by default. Set
+           --result-icon-size to a fixed px value to make it smaller. */
+        .sc-result-card .sc-icon {
+            width: var(--result-icon-size);
+            height: var(--result-icon-size);
+        }
+
+        .sc-result-card.sc-result-muted {
+            border-color: var(--card-border);
+        }
+
+        .sc-result-arrow {
+            width: 24px;
+            height: 24px;
+            flex: 0 0 auto;
+            color: var(--muted-color);
+            align-self: center;
+            margin-top: 1.1rem;
+        }
+
+        .sc-result-arrow svg { width: 100%; height: 100%; display: block; stroke-width: var(--icon-stroke); }
+
+        .sc-movement {
+            font-family: var(--heading-font);
+            font-size: var(--body-size);
+            font-weight: 700;
+            line-height: 1.4;
+            color: var(--primary-color);
+            margin: 1.25rem 0 0 0;
+        }
+
+        .sc-feedback {
+            font-family: var(--body-font);
+            font-size: var(--body-size);
+            line-height: 1.6;
+            margin: 1.25rem 0 0 0;
+            /* Honours line breaks typed as \n in the CONFIG feedback text,
+               so long feedback can be split into paragraphs */
+            white-space: pre-line;
+        }
+
+        /* === RETRY BUTTON === */
+        .sc-retry-row {
+            margin-top: auto;
+            padding-top: 1.5rem;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .sc-retry {
+            min-height: 56px;
+            padding: 0.6rem 1.5rem;
+            gap: 0.6rem;
+            background: #FFFFFF;
+            border: 3px solid var(--text-color);
+            border-radius: var(--button-radius);
+            font-family: var(--body-font);
+            font-size: var(--body-size);
+            font-weight: 600;
+            color: var(--text-color);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s ease, border-color 0.15s ease, transform 0.2s ease;
+        }
+
+.sc-retry:hover {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .sc-retry:hover svg { transform: rotate(-45deg); }
+
+        .sc-retry svg {
+            width: 32px;
+            height: 32px;
+            flex: 0 0 auto;
+            display: block;
+            stroke-width: var(--icon-stroke);
+            transition: transform 0.2s ease;
+        }
+
+        /* === UTILITY === */
+        .sc-hidden { display: none !important; }
+
+        .sr-only {
+            position: absolute;
+            width: 1px; height: 1px;
+            padding: 0; margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* === RESPONSIVE BREAKPOINTS === */
+        @media (min-width: 1000px) {
+            :root { --icon-size: 84px; }
+        }
+
+        @media (max-width: 760px) {
+            :root {
+                --icon-size: 40px;
+                --card-min-height: 118px;
+                --card-gap: 10px;
+                --panel-padding: 1.1rem;
+                --box-padding: 1.5rem;
+            }
+        }
+
+        /* Single column stack on phones */
+        @media (max-width: 600px) {
+            :root {
+                --icon-size: 44px;
+                --card-min-height: 110px;
+                --panel-padding: 1.25rem;
+                --box-padding: 1.25rem;
+            }
+
+            .sc-panel {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .sc-card {
+                flex: 0 0 auto;
+                width: 100%;
+                max-width: 220px;
+            }
+
+            .sc-result-panel {
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+
+            .sc-result-arrow {
+                margin-top: 0;
+                transform: rotate(90deg);
+            }
+
+			/* Focus is moved here after the flip, so no ring for mouse users */
+			.sc-success-title:focus:not(:focus-visible) { outline: none; }
+			
+            .sc-result-card { width: 100%; max-width: 220px; }
+        }
+    </style>
+</head>
+<body class="rise-body">
+    <main id="app" class="sc-wrap">
+      <div class="sc-scene">
+        <div id="flipper" class="sc-flip">
+
+        <!-- QUESTION VIEW (front face) -->
+        <section id="questionView" class="sc-face sc-front">
+            <h2 id="appTitle" class="sc-title"></h2>
+            <p id="questionText" class="sc-question"></p>
+            <hr class="sc-rule">
+
+            <div id="noBaselineNote" class="sc-note sc-hidden" role="status" aria-live="polite"></div>
+            <p id="recallLine" class="sc-recall sc-hidden"></p>
+
+            <div id="scalePanel" class="sc-panel" role="radiogroup" aria-labelledby="questionText"></div>
+
+            <div class="sc-actions">
+                <button id="submitBtn" class="btn-primary" type="button" disabled></button>
+            </div>
+        </section>
+
+        <!-- RESULT VIEW (back face) -->
+        <section id="resultView" class="sc-face sc-back" role="status" aria-live="polite" aria-hidden="true">
+            <div class="sc-success-head">
+                <span id="successMark" class="sc-success-mark" aria-hidden="true"></span>
+                <h2 id="successTitle" class="sc-success-title" tabindex="-1"></h2>
+            </div>
+
+            <div id="resultPanel" class="sc-result-panel"></div>
+
+            <p id="movementText" class="sc-movement sc-hidden"></p>
+            <p id="feedbackText" class="sc-feedback"></p>
+
+            <div id="retryRow" class="sc-retry-row sc-hidden">
+                <button id="retryBtn" class="sc-retry" type="button"></button>
+            </div>
+        </section>
+
+        </div><!-- /flipper -->
+      </div><!-- /scene -->
+    </main>
+
+    <script>
+    /* =========================================================
+       CONFIGURATION — Edit values here. Do not edit code below.
+       ========================================================= */
+    const CONFIG = {
+
+        // --- Identity ---
+        APP_TITLE: 'Confidence check',      // Shown as the block title and the browser tab title
+
+        // --- Mode ---
+        // 'initial' = the first placement, at the start of the course.
+        //             Saves the learner's answer for later recall.
+        // 'revisit'  = the second placement, at the end of the course.
+        //             Reads the saved answer, shows it, and asks again.
+        // Use the SAME file twice. Change only this value and the copy below.
+        MODE: 'initial',
+
+        // --- Typography (must match the fonts loaded in <head>) ---
+        HEADING_FONT: 'Space Grotesk',
+        BODY_FONT:    'Inter',
+
+        // --- Font sizes (px) ---
+        // STORYLINE: sized for a Web Object about 1100 px wide on a 1920 x 1080 slide.
+        // The design system's minimum text size is 24 px, so nothing goes below that.
+        LARGE_SIZE:   48,   // Block title
+        HEADING_SIZE: 40,   // Success title
+        BODY_SIZE:    28,   // Question and feedback text
+        SMALL_SIZE:   24,   // Card labels, recall line, button text
+
+        // --- Theme --- (Case File: Teal, and a darker Teal for hover)
+        PRIMARY_COLOR: '#0F766E',
+        PRIMARY_HOVER: '#0B5A54',
+
+        // --- Question ---
+        QUESTION_TEXT: "How confident are you that you could decide a safe next step when a donation is processed but not yet in the bank?",
+
+        // --- Scale points ---
+        // Minimum 2, maximum 5. Listed left to right, lowest to highest.
+        // Anything beyond 5 is ignored. Fewer than 2 will stop the block loading.
+        SCALE_POINTS: [
+            { value: 1, label: 'Not at all' },
+            { value: 2, label: 'Not really' },
+            { value: 3, label: 'Somewhat' },
+            { value: 4, label: 'Mostly' },
+            { value: 5, label: 'Yes, Easily' }
+        ],
+
+        // --- Icon set ---
+        // 'faces'   — outlined faces, sad through happy. Works at any point count.
+        // 'thumbs'  — thumbs down through thumbs up. Reads best at 2 or 3 points.
+        //             At 4 or 5 the middle points are angled thumbs, which some
+        //             learners find harder to read.
+        // 'stars'   — one star per card, filling up as the scale rises.
+        // 'numbers' — a numbered circle per card.
+        // 'custom'  — your own SVG, supplied in CUSTOM_ICONS below.
+        ICON_SET: 'faces',
+
+        // Used only when ICON_SET is 'custom'. One entry per scale point,
+        // in the same order. Paste full inline SVG markup for each.
+        // Set the SVG width and height to 100% so it scales with the card.
+        CUSTOM_ICONS: [],
+
+        // --- Width ---
+        // Caps how wide the content gets on large blocks and centres it, the
+        // way a Rise survey block does. Set to 0 to fill the full block width.
+        MAX_WIDTH: 0,   // STORYLINE: 0 = fill the Web Object, whose size you set on the slide
+
+        // --- Container box ---
+        // true  = draws a light border and white background around the whole
+        //         block, matching the framed look of a Rise survey block.
+        // false = no frame, so the Rise page background shows through.
+        SHOW_CONTAINER_BOX: true,
+
+        // --- Retry ---
+        // true  = a small retry button appears at the bottom right of the
+        //         feedback side. It turns the card back over with the previous
+        //         answer still selected so the learner can change it.
+        // false = the answer is final once submitted.
+        // Note: the Rise completion signal has already fired by then and
+        // cannot be taken back, so completion stays marked either way.
+        SHOW_RETRY: true,
+        RETRY_LABEL: 'Answer again',
+
+        // --- Flip animation ---
+        // true  = the block turns over like a card to reveal the feedback.
+        // false = the feedback simply replaces the question, no animation.
+        // Learners with reduced motion turned on always get the instant swap.
+        FLIP_ON_SUBMIT: true,
+
+        // Shadow behind the container box. Any valid CSS box-shadow value.
+        // Set to 'none' for a flat box with only a border.
+        BOX_SHADOW: 'none',   // STORYLINE: flat box, as in the design system
+
+        // --- Submit button ---
+        SUBMIT_LABEL: 'Submit',
+
+        // --- Success state (shown after submitting) ---
+        SUCCESS_ICON: 'check',              // 'check' or 'thumb'
+        SUCCESS_TITLE: "Thanks. Here is what you selected",
+
+        // Feedback shown to everyone, whatever they picked.
+        // This is used whenever FEEDBACK_BY_VALUE below is null, or when it has
+        // no entry matching the learner's choice.
+        FEEDBACK_TEXT: "There is no right or wrong answer here. Confidence grows with practice, so replay the case whenever you like and try a different path.",
+
+        // Optional feedback that changes with the answer. Keys must match the
+        // value numbers in SCALE_POINTS above — one entry per point, up to five.
+        // STORYLINE: every line points back to the three steps in the job aid
+        // (match the record, check deposit evidence, say what the report supports).
+        FEEDBACK_BY_VALUE: {
+            1: "That is a fair place to start. A missing-money message feels urgent, but the evidence gives you a calm order to work in: match the record, check the deposit report, then say only what it supports. Replay the case and watch for that order.",
+            2: "Thanks for being straight about that. The job aid is your shortcut: match the record, check the deposit evidence, say what the report supports. Review it, then try the case again and notice which step feels shakiest.",
+            3: "That is a realistic place to be after one practice case. The three steps stay the same every time. A second run, choosing a different wrong answer first, builds the habit.",
+            4: "Good. Keep the habit that got you here: confirm what the report actually says before you answer, and plan to follow up if a deposit is overdue or looks inconsistent.",
+            5: "Strong. Keep checking the evidence even when you feel sure, because a real report may not look like this fictional one. If a deposit is overdue or inconsistent, follow up before you reassure anyone."
+        },
+
+        // --- Revisit mode copy (used only when MODE is 'revisit') ---
+        REVISIT_TITLE: 'Confidence check',
+        REVISIT_QUESTION: "Here's what you chose at the start of the module. Now that you're finished, how would you answer the same question?",
+
+        // {answer} is replaced with the label the learner picked the first time.
+        REVISIT_RECALL_TEXT: 'At the start of this module you chose {answer}.',
+
+        // Small tag shown on the card the learner picked the first time.
+        REVISIT_PREVIOUS_TAG: 'Your earlier answer',
+
+        // Shown when no earlier answer can be found — different browser,
+        // different device, cleared history, or the first block was skipped.
+        REVISIT_NO_BASELINE_NOTE: "We couldn't find your earlier answer, so this one starts fresh. That usually happens if you began the course on a different device or browser.",
+
+        REVISIT_SUCCESS_TITLE: "Thanks! Here's how your answers compare",
+        REVISIT_FEEDBACK_TEXT: "Comparing the two is the useful part. If your answer moved, think about what changed. If it stayed the same, that's worth noticing too — confidence often builds slowly, and the habit of asking matters more than the score.",
+
+        // Optional feedback based on how the answer CHANGED. This is checked
+        // first in revisit mode. Leave out any key to fall through to the
+        // options below it. Set the whole thing to null to skip it.
+        REVISIT_FEEDBACK_BY_MOVEMENT: {
+            improved:  "That's worth noticing. Whatever moved it, the thing that keeps it moving is doing it rather than feeling ready — comfort tends to follow the first few times, not come before them.\n\nTwo habits are worth carrying out of here. Ask specifically, so you get an answer you can actually use. And confirm before you start, by saying the steps back or having someone watch you do it once. That second one is the step most people drop first, even when they're comfortable asking.\n\nOne more thing. When you ask a question in front of someone newer, you've just shown them it's normal. That does more than anything written in a toolkit.",
+            unchanged: "That's a fair answer, and a common one. A twenty-minute module doesn't usually change how a conversation feels — what changes it is having done it once and found out it was shorter than you expected.\n\nSo don't aim for comfortable. Aim for one question, on one shift, about one thing you're genuinely not sure of. Use a phrase from Lesson 3 if it helps, and pick the person you find easiest. If asking outright still feels like a lot, start with confirming instead — saying steps back to check you've got them right is lower stakes than raising a question, and it's the same habit.\n\nAnd if you'd rather plan it before you say anything to anyone, the Conversation Planner in the toolkit is there for that.",
+            declined:  "That's worth paying attention to rather than brushing past.\n\nSometimes going through something like this makes you more aware of the moments you didn't ask about, and that feels worse before it feels useful. The awareness is the part that helps — it's hard to change something you haven't noticed.\n\nBut sometimes it's not that. Sometimes it's that thinking about it directly brought up how a particular conversation went, or a particular person. If that's what happened, the thing to remember is that they aren't your only route. Lesson 4 listed a trainer, HR, and a union rep, and the toolkit's last section lists organizations outside your workplace altogether — including your provincial human rights office.\n\nYou don't have to work this out alone, and you don't have to start with the hardest conversation."
+        },
+
+        // Optional feedback that changes with the learner's NEW answer.
+        // Checked only when no movement entry above matched.
+        // Same rules as FEEDBACK_BY_VALUE. Set to null to skip it.
+        REVISIT_FEEDBACK_BY_VALUE: null,
+
+        // Movement summary — a short line above the feedback paragraph that
+        // describes how the answer changed. Set SHOW_MOVEMENT to false to hide it.
+        // {steps} is replaced with 'one step', 'two steps', and so on.
+        SHOW_MOVEMENT: true,
+        MOVEMENT_UP_TEXT:   'Your answer moved up {steps}.',
+        MOVEMENT_DOWN_TEXT: 'Your answer moved down {steps}.',
+        MOVEMENT_SAME_TEXT: 'You answered the same way as you did at the start.',
+
+        // Captions above the two cards in the comparison
+        REVISIT_THEN_CAPTION: 'At the start',
+        REVISIT_NOW_CAPTION:  'Now',
+
+        // --- Rise completion and resize messages ---
+        // STORYLINE: this block does not run in Rise, so both are off.
+        // Completion is handled by the ConfidenceSubmitted variable instead.
+        RISE_COMPLETION: false,
+        RISE_MESSAGES: false,               // STORYLINE (new): false = never post resize/complete messages to the parent page
+        COMPLETION_TRIGGER: 'onSave',       // Fires when the learner submits
+
+        // --- Storage ---
+        // STORYLINE: there is only one placement (single rating after the case),
+        // so nothing needs to be saved in the browser. localStorage is shared by
+        // every page on the same web address (for example your whole
+        // github.io account), so it stays off unless you build a revisit copy.
+        // If you turn it on, keep the prefix unique to this course.
+        SAVE_TO_BROWSER: false,             // STORYLINE (new)
+        INSTANCE_ID: 1,
+        STORAGE_KEY_PREFIX: 'test_donation_confidence_',
+
+        // --- Storyline bridge (STORYLINE, new) ---
+        // The names must match the variables you create in Storyline exactly,
+        // including capital letters.
+        STORYLINE_BRIDGE: true,                     // false = run the block on its own (for testing in a browser)
+        STORYLINE_VAR_RATING: 'ConfidenceRating',   // Number.      0 = not answered, 1 to 5 = the card chosen
+        STORYLINE_VAR_SUBMITTED: 'ConfidenceSubmitted', // True/False. Becomes True when the learner submits
+        STORYLINE_VAR_LOADED: 'ConfidenceCodeLoaded'    // True/False. Becomes True as soon as this page has loaded
+    };
+
+    /* =========================================================
+       APPLICATION LOGIC — Do not edit below this line.
+       ========================================================= */
+
+    const MAX_POINTS = 5;
+    const MIN_POINTS = 2;
+
+    const STORAGE_KEY = `${CONFIG.STORAGE_KEY_PREFIX}${CONFIG.INSTANCE_ID}`;
+
+    let scalePoints  = [];
+    let selectedValue = null;
+    let baseline      = null;   // { value, label } from the first placement, or null
+    let effectiveMode = 'initial';
+    let completionSent = false;
+
+    /* ---------------------------------------------------------
+       CONFIG → CSS variable sync.
+       The :root values in CSS are defaults. This overrides them
+       at runtime so CONFIG stays the single source of truth.
+       --------------------------------------------------------- */
+    function applyConfig() {
+        const root = document.documentElement.style;
+        // STORYLINE: added Arial as a fallback so text stays sans-serif if Google Fonts cannot load
+        root.setProperty('--heading-font',  `'${CONFIG.HEADING_FONT}', Arial, sans-serif`);
+        root.setProperty('--body-font',     `'${CONFIG.BODY_FONT}', Arial, sans-serif`);
+        root.setProperty('--large-size',    `${CONFIG.LARGE_SIZE}px`);
+        root.setProperty('--heading-size',  `${CONFIG.HEADING_SIZE}px`);
+        root.setProperty('--body-size',     `${CONFIG.BODY_SIZE}px`);
+        root.setProperty('--small-size',    `${CONFIG.SMALL_SIZE}px`);
+        root.setProperty('--primary-color', CONFIG.PRIMARY_COLOR);
+        root.setProperty('--primary-hover', CONFIG.PRIMARY_HOVER);
+        root.setProperty('--max-width',
+            CONFIG.MAX_WIDTH > 0 ? `${CONFIG.MAX_WIDTH}px` : '100%');
+        root.setProperty('--box-shadow', CONFIG.BOX_SHADOW || 'none');
+
+        const isRevisit = effectiveMode === 'revisit';
+        const title = isRevisit ? CONFIG.REVISIT_TITLE : CONFIG.APP_TITLE;
+
+        document.title = title;
+        document.getElementById('appTitle').textContent = title;
+        document.getElementById('questionText').textContent =
+            isRevisit ? CONFIG.REVISIT_QUESTION : CONFIG.QUESTION_TEXT;
+        document.getElementById('submitBtn').textContent = CONFIG.SUBMIT_LABEL;
+
+        // Optional frame around each face, so the box turns over with the card
+        const boxed = CONFIG.SHOW_CONTAINER_BOX === true;
+        document.getElementById('questionView').classList.toggle('sc-boxed', boxed);
+        document.getElementById('resultView').classList.toggle('sc-boxed', boxed);
+    }
+
+    /* ---------------------------------------------------------
+       Escapes user or stored text before it goes into innerHTML.
+       --------------------------------------------------------- */
+    function escapeHtml(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    /* ---------------------------------------------------------
+       Storage helpers. Some LMS and privacy settings block
+       storage entirely, so every access is wrapped.
+       --------------------------------------------------------- */
+    function safeGetItem(key) {
+        try { return localStorage.getItem(key); } catch (e) { return null; }
+    }
+
+    function safeSetItem(key, value) {
+        try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
+    }
+
+    function readBaseline() {
+        const raw = safeGetItem(STORAGE_KEY);
+        if (!raw) return null;
+        try {
+            const data = JSON.parse(raw);
+            if (data && typeof data.value !== 'undefined' && data.label) return data;
+            return null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function saveAnswer(point) {
+        if (!CONFIG.SAVE_TO_BROWSER) return;   // STORYLINE: nothing is stored by default
+        safeSetItem(STORAGE_KEY, JSON.stringify({
+            value: point.value,
+            label: point.label,
+            savedAt: new Date().toISOString()
+        }));
+    }
+
+    /* ---------------------------------------------------------
+       Rise auto resize. Reports document height to the parent
+       on load and whenever content changes.
+       --------------------------------------------------------- */
+    function notifyRiseHeight() {
+        if (!CONFIG.RISE_MESSAGES) return;   // STORYLINE: not running in Rise
+        const height = document.documentElement.scrollHeight;
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'setHeight', height: height }, '*');
+        }
+    }
+
+    /* ---------------------------------------------------------
+       Rise completion signal. Guarded so it only fires once.
+       --------------------------------------------------------- */
+    function sendRiseCompletion() {
+        if (completionSent || !CONFIG.RISE_COMPLETION || !CONFIG.RISE_MESSAGES) return;
+        try {
+            window.parent.postMessage({ type: 'complete' }, '*');
+        } catch (e) {
+            // Silently fail — block may not be in an iframe
+        }
+        completionSent = true;
+    }
+
+    /* =========================================================
+       STORYLINE BRIDGE (new)
+       A Web Object runs in an iframe inside the published course. When the
+       page is served from the same address as the course (for example both on
+       GitHub Pages), the iframe can reach Storyline's player through
+       window.parent.GetPlayer() and write to Storyline variables with SetVar.
+       If that is not possible, nothing breaks: the block still works on its
+       own and the native fallback layer in Storyline takes over.
+       ========================================================= */
+    /**
+     * Finds Storyline's player object, which owns every Storyline variable.
+     * A Web Object runs inside an iframe, so the player lives in a parent window.
+     * @returns {Object|null} the player, or null when it cannot be reached.
+     */
+    function getStorylinePlayer() {
+        // Windows that might hold the player: the direct parent, then the top window
+        const candidates = [];
+        try { candidates.push(window.parent); } catch (e) { /* cross-origin */ }
+        try { candidates.push(window.top); } catch (e) { /* cross-origin */ }
+
+        for (const win of candidates) {
+            try {
+                // GetPlayer exists only inside a published Storyline course
+                if (win && win !== window && typeof win.GetPlayer === 'function') {
+                    return win.GetPlayer();
+                }
+            } catch (e) {
+                // Blocked because the course and this page are on different addresses
+            }
+        }
+        return null;   // Not inside Storyline: the block still works on its own
+    }
+
+    /**
+     * Writes one value to a Storyline variable.
+     * Never throws: if anything is missing, it does nothing and the course still runs.
+     * @param {string} name   Variable name. Must match Storyline exactly, capitals included.
+     * @param {*}      value  Number, string or boolean, matching the variable's type.
+     * @returns {boolean} true if the value was written.
+     */
+    function setStorylineVar(name, value) {
+        if (!CONFIG.STORYLINE_BRIDGE || !name) return false;   // bridge switched off in CONFIG
+        const player = getStorylinePlayer();
+        if (!player) return false;                             // no player: do nothing, break nothing
+        try {
+            player.SetVar(name, value);                        // the line that writes the variable
+            return true;
+        } catch (e) {
+            console.warn('Confidence check: could not set Storyline variable ' + name, e);
+            return false;
+        }
+    }
+
+    /**
+     * Tells Storyline this code has loaded. A trigger in Storyline waits 3 seconds
+     * and opens the native fallback layer only if this flag is still False.
+     */
+    function announceLoaded() {
+        setStorylineVar(CONFIG.STORYLINE_VAR_LOADED, true);
+    }
+
+    /**
+     * Sends the learner's answer to Storyline.
+     * The rating is sent first, then the flag, so a trigger that listens for
+     * ConfidenceSubmitted always finds the rating already set.
+     * @param {Object} point  The chosen scale point; point.value is 1 to 5.
+     */
+    function reportRating(point) {
+        setStorylineVar(CONFIG.STORYLINE_VAR_RATING, Number(point.value));   // 1 to 5
+        setStorylineVar(CONFIG.STORYLINE_VAR_SUBMITTED, true);               // unlocks Continue
+    }
+
+    /* =========================================================
+       ICON LIBRARY
+       All icons share the same 24 by 24 grid, round caps, and
+       stroke weight so the sets look consistent with each other.
+       ========================================================= */
+
+    function svgWrap(inner, extraAttrs) {
+        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true" ${extraAttrs || ''}>${inner}</svg>`;
+    }
+
+    /* --- Faces ---------------------------------------------- */
+    /* A five step master ramp. Fewer points pick evenly spaced
+       faces from it so the middle always lands sensibly.        */
+    const FACE_RAMP = ['sad', 'frown', 'neutral', 'smile', 'grin'];
+
+    const FACE_PARTS = {
+        /* Worried face — raised brows over dot eyes with a small open mouth,
+           matching the Rise reference icon. */
+        sad: {
+            eyes: '<circle cx="9.4" cy="11.3" r="0.9" fill="currentColor" stroke="none"/>' +
+                  '<circle cx="14.6" cy="11.3" r="0.9" fill="currentColor" stroke="none"/>',
+            brows: '<path d="M8.05 8.95c0.55-0.8 1.5-1 2.35-0.5"/>' +
+                   '<path d="M15.95 8.95c-0.55-0.8-1.5-1-2.35-0.5"/>',
+            mouth: '<path d="M9.8 17.15c0-1.55 0.99-2.5 2.2-2.5s2.2 0.95 2.2 2.5z"/>'
+        },
+        frown: {
+            eyes: '<circle cx="9" cy="10.2" r="0.9" fill="currentColor" stroke="none"/>' +
+                  '<circle cx="15" cy="10.2" r="0.9" fill="currentColor" stroke="none"/>',
+            brows: '',
+            mouth: '<path d="M8.6 16.4c1-1.4 2.2-2.1 3.4-2.1s2.4 0.7 3.4 2.1"/>'
+        },
+        neutral: {
+            eyes: '<circle cx="9" cy="10" r="0.9" fill="currentColor" stroke="none"/>' +
+                  '<circle cx="15" cy="10" r="0.9" fill="currentColor" stroke="none"/>',
+            brows: '',
+            mouth: '<path d="M8.8 15.4h6.4"/>'
+        },
+        smile: {
+            eyes: '<circle cx="9" cy="10" r="0.9" fill="currentColor" stroke="none"/>' +
+                  '<circle cx="15" cy="10" r="0.9" fill="currentColor" stroke="none"/>',
+            brows: '',
+            mouth: '<path d="M8.6 14.3c1 1.4 2.2 2.1 3.4 2.1s2.4-0.7 3.4-2.1"/>'
+        },
+        grin: {
+            eyes: '<circle cx="9" cy="9.8" r="0.9" fill="currentColor" stroke="none"/>' +
+                  '<circle cx="15" cy="9.8" r="0.9" fill="currentColor" stroke="none"/>',
+            brows: '',
+            mouth: '<path d="M7.8 13.4h8.4c0 2.3-1.9 3.9-4.2 3.9s-4.2-1.6-4.2-3.9z"/>'
+        }
+    };
+
+    function faceIcon(index, total) {
+        const key = FACE_RAMP[rampIndex(index, total, FACE_RAMP.length)];
+        const f = FACE_PARTS[key];
+        return svgWrap('<circle cx="12" cy="12" r="9.2"/>' + f.brows + f.eyes + f.mouth);
+    }
+
+    /* Maps a card position onto an evenly spaced point of a ramp. */
+    function rampIndex(index, total, rampLength) {
+        if (total <= 1) return rampLength - 1;
+        return Math.round(index * (rampLength - 1) / (total - 1));
+    }
+
+    /* --- Thumbs --------------------------------------------- */
+    /* One thumb shape, rotated. 180 degrees is thumbs down,
+       0 degrees is thumbs up, 90 is the sideways "so so".       */
+    const THUMB_SHAPE =
+        '<path d="M7.2 21.2V10.4l4.4-7a1.75 1.75 0 0 1 3.2 1.3L13.7 9.2h5.1a2 2 0 0 1 2 2.35l-1.2 7.05a2.2 2.2 0 0 1-2.2 1.85H7.2z"/>' +
+        '<rect x="2.6" y="10.4" width="4.6" height="10.8" rx="1.1"/>';
+
+    function thumbIcon(index, total) {
+        // 0 = fully down, 1 = fully up
+        const t = total <= 1 ? 1 : index / (total - 1);
+        const angle = 180 - (t * 180);   // 180 down → 0 up
+        const inner = `<g transform="rotate(${angle} 12 12)">${THUMB_SHAPE}</g>`;
+        return svgWrap(inner);
+    }
+
+    /* --- Stars ---------------------------------------------- */
+    /* One star per card. The fill rises with the scale, so the
+       lowest point is an outline and the highest is solid.      */
+    const STAR_PATH = 'M12 3.2l2.7 5.5 6.1 0.9-4.4 4.3 1 6-5.4-2.9-5.4 2.9 1-6-4.4-4.3 6.1-0.9z';
+
+    function starIcon(index, total) {
+        const fraction = total <= 1 ? 1 : (index + 1) / total;
+        const clipId = `starClip${index}_${Math.random().toString(36).slice(2, 8)}`;
+        const inner =
+            `<defs><clipPath id="${clipId}">` +
+            `<rect x="0" y="0" width="${(fraction * 24).toFixed(2)}" height="24"/>` +
+            `</clipPath></defs>` +
+            `<path d="${STAR_PATH}" fill="currentColor" stroke="none" clip-path="url(#${clipId})"/>` +
+            `<path d="${STAR_PATH}"/>`;
+        return svgWrap(inner);
+    }
+
+    /* --- Numbers -------------------------------------------- */
+    function numberIcon(index, total, point) {
+        const label = String(point.value);
+        const inner =
+            '<circle cx="12" cy="12" r="9.2"/>' +
+            `<text x="12" y="12.4" text-anchor="middle" dominant-baseline="central"
+                   font-size="10" fill="currentColor" stroke="none">${escapeHtml(label)}</text>`;
+        return svgWrap(inner);
+    }
+
+    /* --- Success marks -------------------------------------- */
+    function successIcon() {
+        if (CONFIG.SUCCESS_ICON === 'thumb') {
+            return svgWrap(`<g transform="scale(0.92) translate(1 1)">${THUMB_SHAPE}</g>`);
+        }
+        return svgWrap('<circle cx="12" cy="12" r="9.2"/><path d="M8 12.3l2.7 2.7 5.3-5.6"/>');
+    }
+
+    function retryIcon() {
+        return svgWrap('<path d="M20 5.5v5h-5"/>' +
+                       '<path d="M19.4 10.5a7.6 7.6 0 1 0-1.1 6.9"/>');
+    }
+
+    function arrowIcon() {
+        return svgWrap('<path d="M4 12h15"/><path d="M13.5 6.5L20 12l-6.5 5.5"/>');
+    }
+
+    /* --- Icon dispatcher ------------------------------------ */
+    function iconFor(index, total, point) {
+        switch (CONFIG.ICON_SET) {
+            case 'thumbs':  return thumbIcon(index, total);
+            case 'stars':   return starIcon(index, total);
+            case 'numbers': return numberIcon(index, total, point);
+            case 'custom':
+                return (CONFIG.CUSTOM_ICONS && CONFIG.CUSTOM_ICONS[index]) || '';
+            case 'faces':
+            default:        return faceIcon(index, total);
+        }
+    }
+
+    /* =========================================================
+       SCALE RENDERING
+       ========================================================= */
+
+    /* Trims the configured points to the supported 2 to 5 range. */
+    function resolveScalePoints() {
+        const raw = Array.isArray(CONFIG.SCALE_POINTS) ? CONFIG.SCALE_POINTS : [];
+        if (raw.length < MIN_POINTS) {
+            console.error(`Sentiment Check: SCALE_POINTS needs at least ${MIN_POINTS} entries.`);
+            return [];
+        }
+        if (raw.length > MAX_POINTS) {
+            console.warn(`Sentiment Check: SCALE_POINTS is limited to ${MAX_POINTS}. Extra points ignored.`);
+            return raw.slice(0, MAX_POINTS);
+        }
+        return raw;
+    }
+
+    function buildScale() {
+        const panel = document.getElementById('scalePanel');
+        panel.innerHTML = '';
+
+        const total = scalePoints.length;
+        const showPrevious = effectiveMode === 'revisit' && baseline !== null;
+
+        scalePoints.forEach((point, index) => {
+            const card = document.createElement('div');
+            card.className = 'sc-card';
+            // Each face is a radio button for screen readers
+            card.setAttribute('role', 'radio');
+            card.setAttribute('aria-checked', 'false');
+            card.setAttribute('tabindex', index === 0 ? '0' : '-1');
+            card.dataset.value = point.value;
+            card.dataset.index = index;
+
+            const isPrevious = showPrevious && String(baseline.value) === String(point.value);
+
+            let accessibleLabel = point.label;
+            if (isPrevious) {
+                card.classList.add('sc-previous');
+                accessibleLabel += `. ${CONFIG.REVISIT_PREVIOUS_TAG}`;
+            }
+            card.setAttribute('aria-label', accessibleLabel);
+
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'sc-icon';
+            iconSpan.innerHTML = iconFor(index, total, point);
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'sc-card-label';
+            labelSpan.textContent = point.label;
+
+            card.appendChild(iconSpan);
+            card.appendChild(labelSpan);
+
+            if (isPrevious) {
+                const tag = document.createElement('span');
+                tag.className = 'sc-prev-tag';
+                tag.textContent = CONFIG.REVISIT_PREVIOUS_TAG;
+                card.appendChild(tag);
+            }
+
+            card.addEventListener('click', () => selectCard(index));
+            card.addEventListener('keydown', (e) => handleCardKeys(e, index));
+
+            panel.appendChild(card);
+        });
+    }
+
+    function cards() {
+        return Array.from(document.querySelectorAll('.sc-card'));
+    }
+
+    function selectCard(index) {
+        const all = cards();
+        all.forEach((c, i) => {
+            const checked = i === index;
+            c.setAttribute('aria-checked', checked ? 'true' : 'false');
+            c.setAttribute('tabindex', checked ? '0' : '-1');
+        });
+        selectedValue = scalePoints[index].value;
+        document.getElementById('submitBtn').disabled = false;
+        all[index].focus();
+    }
+
+    /* Arrow key navigation for the radio group. */
+    function handleCardKeys(e, index) {
+        const total = scalePoints.length;
+        let next = null;
+
+        // Arrow keys move through the group; % wraps around
+        switch (e.key) {
+            case 'ArrowRight':
+            case 'ArrowDown': next = (index + 1) % total; break;
+            case 'ArrowLeft':
+            case 'ArrowUp':   next = (index - 1 + total) % total; break;
+            case 'Home':      next = 0; break;
+            case 'End':       next = total - 1; break;
+            case ' ':
+            case 'Enter':
+                e.preventDefault();
+                selectCard(index);
+                return;
+            default: return;
+        }
+
+        e.preventDefault();
+        selectCard(next);
+    }
+
+    /* =========================================================
+       SUBMIT AND RESULT
+       ========================================================= */
+
+    function findPoint(value) {
+        return scalePoints.find(p => String(p.value) === String(value)) || null;
+    }
+
+    /* Builds a single result card. Muted styling is used for the
+       earlier answer so the current one reads as the focus.      */
+    function resultCardHtml(point, index, total, caption, muted) {
+        const icon = iconFor(index, total, point);
+        return `
+            <div class="sc-result-item">
+                <span class="sc-result-caption">${escapeHtml(caption)}</span>
+                <div class="sc-result-card${muted ? ' sc-result-muted' : ''}">
+                    <span class="sc-icon">${icon}</span>
+                    <span class="sc-card-label">${escapeHtml(point.label)}</span>
+                </div>
+            </div>`;
+    }
+
+    /* ---------------------------------------------------------
+       Picks the feedback paragraph. A matching entry in the by
+       value map wins. Anything missing falls back to the single
+       shared paragraph, so partial maps are safe.
+       --------------------------------------------------------- */
+    function usableString(v) {
+        return typeof v === 'string' && v.trim() !== '' ? v : null;
+    }
+
+    function resolveFeedback(isRevisit, value, movement) {
+        // Revisit mode checks movement first, then the answer, then the fallback
+        if (isRevisit && movement && CONFIG.REVISIT_FEEDBACK_BY_MOVEMENT) {
+            const byMove = usableString(CONFIG.REVISIT_FEEDBACK_BY_MOVEMENT[movement]);
+            if (byMove) return byMove;
+        }
+
+        const map = isRevisit ? CONFIG.REVISIT_FEEDBACK_BY_VALUE : CONFIG.FEEDBACK_BY_VALUE;
+        if (map && typeof map === 'object') {
+            const byValue = usableString(map[value]);
+            if (byValue) return byValue;
+        }
+
+        return (isRevisit ? CONFIG.REVISIT_FEEDBACK_TEXT : CONFIG.FEEDBACK_TEXT) || '';
+    }
+
+    /* Returns 'improved', 'unchanged', or 'declined'. */
+    function movementKey(thenIndex, nowIndex) {
+        if (nowIndex > thenIndex) return 'improved';
+        if (nowIndex < thenIndex) return 'declined';
+        return 'unchanged';
+    }
+
+    /* Turns a step count into plain words for the movement line. */
+    const STEP_WORDS = ['', 'one step', 'two steps', 'three steps', 'four steps'];
+
+    function movementLine(thenIndex, nowIndex) {
+        const delta = nowIndex - thenIndex;
+        if (delta === 0) return CONFIG.MOVEMENT_SAME_TEXT;
+        const steps = STEP_WORDS[Math.abs(delta)] || `${Math.abs(delta)} steps`;
+        const template = delta > 0 ? CONFIG.MOVEMENT_UP_TEXT : CONFIG.MOVEMENT_DOWN_TEXT;
+        return String(template).replace('{steps}', steps);
+    }
+
+    function handleSubmit() {
+        if (selectedValue === null) return;
+
+        const point = findPoint(selectedValue);
+        if (!point) return;
+
+        const nowIndex = scalePoints.indexOf(point);
+        const total = scalePoints.length;
+        const isRevisit = effectiveMode === 'revisit' && baseline !== null;
+
+        const resultPanel = document.getElementById('resultPanel');
+        const movementEl = document.getElementById('movementText');
+        let html = '';
+        let movementText = '';
+        let movement = null;
+
+        if (isRevisit) {
+            const thenPoint = findPoint(baseline.value);
+            if (thenPoint) {
+                const thenIndex = scalePoints.indexOf(thenPoint);
+                movementText = movementLine(thenIndex, nowIndex);
+                movement = movementKey(thenIndex, nowIndex);
+                html += resultCardHtml(thenPoint, thenIndex, total, CONFIG.REVISIT_THEN_CAPTION, true);
+                html += `<span class="sc-result-arrow" aria-hidden="true">${arrowIcon()}</span>`;
+            }
+            html += resultCardHtml(point, nowIndex, total, CONFIG.REVISIT_NOW_CAPTION, false);
+        } else {
+            html += `
+                <div class="sc-result-item">
+                    <div class="sc-result-card">
+                        <span class="sc-icon">${iconFor(nowIndex, total, point)}</span>
+                        <span class="sc-card-label">${escapeHtml(point.label)}</span>
+                    </div>
+                </div>`;
+        }
+
+        resultPanel.innerHTML = html;
+
+        document.getElementById('successMark').innerHTML = successIcon();
+        document.getElementById('successTitle').textContent =
+            isRevisit ? CONFIG.REVISIT_SUCCESS_TITLE : CONFIG.SUCCESS_TITLE;
+        document.getElementById('feedbackText').textContent =
+            resolveFeedback(isRevisit, point.value, movement);
+
+        // Movement line only makes sense when there are two answers to compare
+        if (isRevisit && CONFIG.SHOW_MOVEMENT && movementText) {
+            movementEl.textContent = movementText;
+            movementEl.classList.remove('sc-hidden');
+        } else {
+            movementEl.classList.add('sc-hidden');
+        }
+
+        // Only the initial placement writes the baseline, so the
+        // revisit answer never overwrites what is being compared against.
+        if (effectiveMode === 'initial') saveAnswer(point);
+
+        showResult();
+
+        reportRating(point);       // STORYLINE: write ConfidenceRating and ConfidenceSubmitted
+        sendRiseCompletion();
+    }
+
+    /* =========================================================
+       FLIP AND HEIGHT
+       ========================================================= */
+
+    let isFlipped = false;
+
+    function prefersReducedMotion() {
+        return window.matchMedia &&
+               window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    /* Sets the flip container to the taller of the two faces, so the block
+       never shrinks when the feedback replaces the question. */
+    /* Reads a face at its natural height. The faces normally stretch to fill
+       the flip container, so they have to be released for the measurement. */
+    function measureFace(el) {
+        el.classList.add('sc-measure');
+        const h = el.offsetHeight;
+        el.classList.remove('sc-measure');
+        return h;
+    }
+
+    function syncFlipHeight() {
+        const flipper = document.getElementById('flipper');
+        const front = document.getElementById('questionView');
+        const back  = document.getElementById('resultView');
+        if (!flipper) return;
+
+        const target = Math.max(measureFace(front), measureFace(back));
+        const current = parseInt(flipper.style.height, 10) || 0;
+
+        // Only write when it actually changes, to avoid an observer loop
+        if (Math.abs(target - current) > 1) {
+            flipper.style.height = `${target}px`;
+        }
+    }
+
+    /* Turns the card over to reveal the feedback. Focus and screen reader
+       visibility move with it so the hidden face is fully out of the way. */
+    function showResult() {
+        const flipper = document.getElementById('flipper');
+        const front = document.getElementById('questionView');
+        const back  = document.getElementById('resultView');
+
+        // Focus must leave the front face before it is hidden — an aria-hidden
+        // container holding the focused element is invalid and can silence readers
+        if (front.contains(document.activeElement)) document.activeElement.blur();
+
+        front.setAttribute('aria-hidden', 'true');
+        back.removeAttribute('aria-hidden');
+
+        document.getElementById('retryRow')
+            .classList.toggle('sc-hidden', CONFIG.SHOW_RETRY !== true);
+
+        // Nothing on the turned away face should be reachable by keyboard
+        cards().forEach(c => c.setAttribute('tabindex', '-1'));
+        document.getElementById('submitBtn').disabled = true;
+
+        syncFlipHeight();
+
+        const instant = !CONFIG.FLIP_ON_SUBMIT || prefersReducedMotion();
+        flipper.classList.toggle('sc-noflip', instant);
+
+        // Let the height settle before the rotation starts
+        requestAnimationFrame(() => {
+            flipper.classList.add('sc-flipped');
+            isFlipped = true;
+            notifyRiseHeight();
+        });
+
+        setTimeout(() => {
+            syncFlipHeight();
+            notifyRiseHeight();
+            // Land focus on the heading so the reader announces the feedback
+            // from the top rather than relying on the live region alone
+            document.getElementById('successTitle').focus({ preventScroll: true });
+        }, instant ? 50 : 750);
+    }
+
+    /* ---------------------------------------------------------
+       Turns the card back to the question. The learner's answer
+       stays selected so they can see what they picked and change
+       it if they want. Whatever they submit next overwrites the
+       stored answer.
+       --------------------------------------------------------- */
+    function resetToQuestion() {
+        const flipper = document.getElementById('flipper');
+        const front = document.getElementById('questionView');
+        const back  = document.getElementById('resultView');
+
+        // Keep the previous choice highlighted and keyboard reachable
+        const keepIndex = scalePoints.findIndex(
+            p => String(p.value) === String(selectedValue)
+        );
+
+        cards().forEach((c, i) => {
+            const checked = i === keepIndex;
+            c.setAttribute('aria-checked', checked ? 'true' : 'false');
+            c.setAttribute('tabindex', checked ? '0' : '-1');
+        });
+
+        document.getElementById('submitBtn').disabled = keepIndex < 0;
+        document.getElementById('movementText').classList.add('sc-hidden');
+
+        back.setAttribute('aria-hidden', 'true');
+        front.removeAttribute('aria-hidden');
+
+        flipper.classList.remove('sc-flipped');
+        isFlipped = false;
+
+        const instant = !CONFIG.FLIP_ON_SUBMIT || prefersReducedMotion();
+
+        setTimeout(() => {
+            syncFlipHeight();
+            notifyRiseHeight();
+            const active = cards().find(c => c.getAttribute('tabindex') === '0');
+            if (active) active.focus();
+        }, instant ? 50 : 750);
+    }
+
+    /* =========================================================
+       INITIALISATION
+       ========================================================= */
+
+    function init() {
+        scalePoints = resolveScalePoints();
+
+        // Decide the working mode before any copy is applied.
+        // A revisit with no stored answer falls back to a fresh ask.
+        effectiveMode = CONFIG.MODE === 'revisit' ? 'revisit' : 'initial';
+
+        if (effectiveMode === 'revisit') {
+            baseline = readBaseline();
+        }
+
+        applyConfig();
+
+        if (scalePoints.length < MIN_POINTS) {
+            document.getElementById('scalePanel').textContent =
+                'This block needs at least two scale points. Check SCALE_POINTS in the CONFIG block.';
+            document.getElementById('submitBtn').classList.add('sc-hidden');
+            notifyRiseHeight();
+            return;
+        }
+
+        if (effectiveMode === 'revisit') {
+            if (baseline) {
+                const recall = document.getElementById('recallLine');
+                const text = String(CONFIG.REVISIT_RECALL_TEXT)
+                    .replace('{answer}', `<strong>${escapeHtml(baseline.label)}</strong>`);
+                recall.innerHTML = text;
+                recall.classList.remove('sc-hidden');
+            } else {
+                const note = document.getElementById('noBaselineNote');
+                note.textContent = CONFIG.REVISIT_NO_BASELINE_NOTE;
+                note.classList.remove('sc-hidden');
+            }
+        }
+
+        buildScale();
+
+        document.getElementById('submitBtn').addEventListener('click', handleSubmit);
+
+        // Retry button — icon plus a visible text label (secondary button style)
+        const retryBtn = document.getElementById('retryBtn');
+        retryBtn.innerHTML = retryIcon() + '<span></span>';
+        retryBtn.querySelector('span').textContent = CONFIG.RETRY_LABEL;
+        retryBtn.setAttribute('aria-label', CONFIG.RETRY_LABEL);
+        retryBtn.setAttribute('title', CONFIG.RETRY_LABEL);
+        retryBtn.addEventListener('click', resetToQuestion);
+
+        // Keep the flip container matched to the taller face at all widths
+        syncFlipHeight();
+        new ResizeObserver(syncFlipHeight).observe(document.getElementById('questionView'));
+        new ResizeObserver(syncFlipHeight).observe(document.getElementById('resultView'));
+
+        notifyRiseHeight();
+        announceLoaded();          // STORYLINE: ConfidenceCodeLoaded = True
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+    window.addEventListener('load', notifyRiseHeight);
+    new ResizeObserver(notifyRiseHeight).observe(document.body);
+    </script>
+</body>
+</html>
